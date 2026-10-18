@@ -225,8 +225,10 @@ bool FSCreateTexture(LPTEXTURE *texture, const char *fileName, u_int16_t *width,
 
 static void print_info( void )
 {
-	GLboolean b;
+	GLboolean b = GL_FALSE;
+#ifndef GLES
 	glGetBooleanv(GL_STEREO,&b);
+#endif
 
 	DebugPrintf( "gl vendor='%s', renderer='%s', version='%s', shader='%s', stereo='%s'\n",
 		glGetString(GL_VENDOR),
@@ -272,15 +274,24 @@ static void print_info( void )
 	#define GLSL_FRAG_IN   "varying"
 	#define GLSL_FRAG_OUT  ""
 #elif GL >= 3
+  #ifdef GLES
+	#define GLSL_VERSION   "300 es\nprecision highp float"
+  #else
 	#define GLSL_VERSION   "150"
+  #endif
 	#define GLSL_VERT_IN   "in"
 	#define GLSL_FRAG_IN   "in"
 	#define GLSL_FRAG_OUT  "out"
 	#define GLSL_VERT_OUT  "out"
 #endif
+#ifdef GLES
+	#define GLSL_HEADER    "#version " GLSL_VERSION ";\n"
+#else
+	#define GLSL_HEADER    "#version " GLSL_VERSION "\n"
+#endif
 
 static const char *default_vertex_shader =
-	"#version " GLSL_VERSION "\n"
+	GLSL_HEADER
 	"\n"
 	"uniform bool orthographic;\n"
 	"\n"
@@ -299,10 +310,8 @@ static const char *default_vertex_shader =
 	"{\n"
 	"    if (orthographic)\n"
 	"    {\n"
-// TODO - broken in GL 2
-#if 0
-	"        gl_Position = ortho_proj * tlpos;\n"
-#endif
+	// TLVERTEX = screen x,y + z + rhw; rhw is for perspective texturing, not a clip w
+	"        gl_Position = ortho_proj * vec4(tlpos.xyz, 1.0);\n"
 	"    }\n"
 	"    else\n"
 	"    {\n"
@@ -320,7 +329,7 @@ static const char *default_vertex_shader =
 //   - "texturing_enabled" uniform var
 
 static const char *default_fragment_shader =
-	"#version " GLSL_VERSION "\n"
+	GLSL_HEADER
 	"\n"
 	"uniform bool colorkeying_enabled;\n"
 	"uniform bool texturing_enabled;\n"
@@ -508,7 +517,7 @@ static bool set_defaults( void )
 	return true;
 }
 
-static resize_viewport( int width, int height )
+static void resize_viewport( int width, int height )
 {
 	render_viewport_t viewport;
 	viewport.X = 0;
@@ -572,6 +581,9 @@ void render_cleanup( render_info_t * info )
 
 bool render_mode_select( render_info_t * info )
 {
+#ifdef __ANDROID__
+	return true; // one window + GL context for the app's lifetime (OpenXR session is bound to it)
+#endif
 	render_cleanup( info );
 	if(!sdl_init_video())
 		return false;

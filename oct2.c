@@ -4174,6 +4174,128 @@ bool RenderCurrentCameraWithMainGameMenu(void)
 	return true;
 }
 
+#ifdef FX_OPENXR
+#include "fx_quest.h"
+extern u_int16_t FlashScreenPoly;
+extern SCRPOLY ScrPolys[ MAXNUMOFSCRPOLYS ];
+// Game units per metre for head movement and eye separation (a bike's radius is 75 units).
+// Fewer units per metre = smaller eye separation in the world = the level looks bigger and farther away.
+#define FX_UNITS_PER_METRE 48.0f
+
+// Quest stereo: renders the current camera's 3D view once per eye with the head pose added,
+// then binds the HUD panel target (fx_openxr.cpp shows it in front of the camera).
+// hud_scale: HUD panel size relative to the camera's field of view (1 = overlays line up with the 3D view).
+// flash: optional full-screen flash poly to show as an edge glow in each eye instead.
+bool RenderCurrentCameraInVR( RenderCurrentCameraPt render_camera, float hud_scale, SCRPOLY *flash )
+{
+	CAMERA body = CurrentCamera;
+	render_viewport_t old_viewport = viewport;
+	render_display_mode_t old_mode = render_info.ThisMode;
+	float old_framelag = framelag;
+	fx_eye_t e;
+	int eye, i, j;
+	bool ok = true;
+
+	for( eye = 0; eye < 2 && ok; eye++ )
+	{
+		float m[3][3], r[3][3];
+		VECTOR off;
+		if( !fx_vr_begin_eye( eye, &e ) )
+		{
+			ok = false;
+			break;
+		}
+		CurrentCamera = body;
+
+		// orientation: world = Mat * local, so the eye's Mat = Mat * R (R: eye -> ship camera axes)
+		m[0][0] = body.Mat._11; m[0][1] = body.Mat._12; m[0][2] = body.Mat._13;
+		m[1][0] = body.Mat._21; m[1][1] = body.Mat._22; m[1][2] = body.Mat._23;
+		m[2][0] = body.Mat._31; m[2][1] = body.Mat._32; m[2][2] = body.Mat._33;
+		for( i = 0; i < 3; i++ )
+			for( j = 0; j < 3; j++ )
+				r[i][j] = m[i][0] * e.rot[0][j] + m[i][1] * e.rot[1][j] + m[i][2] * e.rot[2][j];
+		CurrentCamera.Mat._11 = r[0][0]; CurrentCamera.Mat._12 = r[0][1]; CurrentCamera.Mat._13 = r[0][2];
+		CurrentCamera.Mat._21 = r[1][0]; CurrentCamera.Mat._22 = r[1][1]; CurrentCamera.Mat._23 = r[1][2];
+		CurrentCamera.Mat._31 = r[2][0]; CurrentCamera.Mat._32 = r[2][1]; CurrentCamera.Mat._33 = r[2][2];
+		CurrentCamera.InvMat._11 = r[0][0]; CurrentCamera.InvMat._12 = r[1][0]; CurrentCamera.InvMat._13 = r[2][0];
+		CurrentCamera.InvMat._21 = r[0][1]; CurrentCamera.InvMat._22 = r[1][1]; CurrentCamera.InvMat._23 = r[2][1];
+		CurrentCamera.InvMat._31 = r[0][2]; CurrentCamera.InvMat._32 = r[1][2]; CurrentCamera.InvMat._33 = r[2][2];
+
+		// position: head offset from the ship camera, in world units
+		off.x = e.pos[0] * FX_UNITS_PER_METRE;
+		off.y = e.pos[1] * FX_UNITS_PER_METRE;
+		off.z = e.pos[2] * FX_UNITS_PER_METRE;
+		CurrentCamera.Pos.x = body.Pos.x + m[0][0] * off.x + m[0][1] * off.y + m[0][2] * off.z;
+		CurrentCamera.Pos.y = body.Pos.y + m[1][0] * off.x + m[1][1] * off.y + m[1][2] * off.z;
+		CurrentCamera.Pos.z = body.Pos.z + m[2][0] * off.x + m[2][1] * off.y + m[2][2] * off.z;
+
+		// the eye image is the whole render target
+		render_info.ThisMode.w = e.width;
+		render_info.ThisMode.h = e.height;
+		viewport.X = 0;
+		viewport.Y = 0;
+		viewport.Width = e.width;
+		viewport.Height = e.height;
+		viewport.ScaleX = e.width * 0.5F;
+		viewport.ScaleY = e.height * 0.5F;
+		viewport.MinZ = 0.0F;
+		viewport.MaxZ = 1.0F;
+		CurrentCamera.Viewport = viewport;
+
+		// asymmetric projection from the eye's field of view (D3D style: ndc = x/z * _11 + _31)
+		CurrentCamera.Proj = proj;
+		CurrentCamera.Proj._11 = 2.0F / ( e.tan_right - e.tan_left );
+		CurrentCamera.Proj._31 = -( e.tan_right + e.tan_left ) / ( e.tan_right - e.tan_left );
+		CurrentCamera.Proj._22 = 2.0F / ( e.tan_up - e.tan_down );
+		CurrentCamera.Proj._32 = -( e.tan_up + e.tan_down ) / ( e.tan_up - e.tan_down );
+		FSSetProjection( &CurrentCamera.Proj );
+
+		// animations advance once per frame, not once per eye
+		if( eye == 1 )
+			framelag = 0.0F;
+		ok = render_camera();
+		framelag = old_framelag;
+
+		// hit flash: a red glow around the edge of the view instead of a flat full-screen overlay
+		if( ok && flash && flash->Trans )
+			fx_vr_eye_tint( flash->R / 255.0F, flash->G / 255.0F, flash->B / 255.0F, flash->Trans / 255.0F );
+	}
+
+	render_info.ThisMode = old_mode;
+	viewport = old_viewport;
+	CurrentCamera = body;
+	FSSetProjection( &proj );
+	Build_View();
+	FSSetView( &view );
+	// the panel spans the field of view the game laid its 2D overlays out for (title screens and
+	// speed changes use their own, so take it from the projection rather than hfov)
+	fx_vr_end_eyes( (float) ( 2.0 * atan( 1.0 / proj._11 ) * 180.0 / M_PI ), hud_scale );
+	FSSetViewPort( &viewport );
+	return ok;
+}
+
+// In flight: the level per eye, then the HUD and in-game menus (scaled in toward the centre).
+static bool RenderMainCameraInVR( void )
+{
+	SCRPOLY flash;  // the game's full-screen hit flash (ships.c MakeScreenFlash), drawn per eye instead
+	bool ok;
+	memset( &flash, 0, sizeof( flash ) );
+	if( FlashScreenPoly != (u_int16_t) -1 )
+		flash = ScrPolys[ FlashScreenPoly ];
+	ok = RenderCurrentCameraInVR( RenderCurrentCamera, 0.65F, &flash );
+
+	// HUD, screen polys and in-game menus on the HUD panel, without the hit flash
+	// (screen polys with no frame info are skipped by the screen poly renderer)
+	if( FlashScreenPoly != (u_int16_t) -1 )
+		ScrPolys[ FlashScreenPoly ].Frm_Info = NULL;
+	DrawMainGameMenu();
+	RenderMainCamera2dPolys();
+	if( FlashScreenPoly != (u_int16_t) -1 )
+		ScrPolys[ FlashScreenPoly ].Frm_Info = flash.Frm_Info;
+	return ok;
+}
+#endif
+
 void SetFOVBasedOnShipSpeed(void)
 {
   static float fov_inc = 0.0F;
@@ -4231,6 +4353,14 @@ bool MainGameRender(void)
 
       CurrentCamera.UseLowestLOD = false;
 
+#ifdef FX_OPENXR
+      if( fx_vr_stereo_ready() )
+      {
+				if( !RenderMainCameraInVR() )
+					return false;
+      }
+      else
+#endif
       if( render_info.stereo_enabled )
       {
 				if(!RenderCurrentCameraInStereo(RenderCurrentCameraWithMainGameMenu))

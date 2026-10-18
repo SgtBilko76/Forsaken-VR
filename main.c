@@ -18,6 +18,9 @@
 #ifndef WIN32
 #include <unistd.h>
 #endif
+#ifdef __ANDROID__
+#include "fx_quest.h"
+#endif
 
 #ifdef __WINE__
 #define LR_VGACOLOR LR_VGA_COLOR
@@ -226,6 +229,12 @@ static bool ParseCommandLine(char* lpCmdLine)
 		else if ( !strcasecmp( option, "QuickHost" ) ) 
 		{
 			QuickStart = QUICKSTART_Start;
+		}
+
+		// start a single player game straight away (testing)
+		else if ( !strcasecmp( option, "QuickStart" ) ) 
+		{
+			QuickStart = QUICKSTART_SinglePlayer;
 		}
 
 		// jump to the join game screen
@@ -589,6 +598,12 @@ int main( int argc, char* argv[] )
 	int i;
 	char cli[500];
     int failcount = 0; // number of times RenderLoop has failed
+
+#ifdef __ANDROID__
+	// Quest: log to logcat, crash handler, chdir into the game folder on /sdcard.
+	if( ! fx_android_init() )
+		return 1;
+#endif
 
 	// build cli string
 	// TODO - cli parsing should be updated

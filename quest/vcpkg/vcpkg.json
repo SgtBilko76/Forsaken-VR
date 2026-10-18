@@ -1,0 +1,8 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "forsaken-quest",
+  "version-string": "0.1.0",
+  "description": "Android (arm64-android) dependencies for the Forsaken Quest build. SDL2, Lua 5.1, luasocket and ENet 1.2 are built from source by the Quest CMake project.",
+  "builtin-baseline": "62159a45e18f3a9ac0548628dcaf74fcb60c6ff9",
+  "dependencies": [ "libpng", "openal-soft", "zlib" ]
+}

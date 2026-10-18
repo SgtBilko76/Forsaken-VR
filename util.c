@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdarg.h>
+#include <ctype.h>
 #include <time.h>
 #include <sys/timeb.h>
 #include "main.h"

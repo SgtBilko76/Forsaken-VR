@@ -4805,6 +4805,12 @@ void ProcessHoloModel( void );
 
 u_int8_t QuickStart = QUICKSTART_None; 
 
+#ifdef FX_OPENXR
+#include "fx_quest.h"
+bool RenderCurrentCameraInVR( RenderCurrentCameraPt render_camera, float hud_scale, SCRPOLY *flash );
+static bool TitleVREyePass = false;
+#endif
+
 bool RenderCurrentMenu(void) // this renders broken main menu
 {
 	u_int16_t	group;
@@ -4894,6 +4900,9 @@ Display Non 0 Clipped Non Faceme Transluecent Polys
 	Display Transluecent Screen Polys
 ===================================================================*/
 
+#ifdef FX_OPENXR
+	if( !TitleVREyePass ) // VR: screen polys go on the menu panel, not into each eye
+#endif
 		if( !DisplayNonSolidScrPolys( &RenderBufs[ 3 ] ) )
 			return false;
 
@@ -4907,6 +4916,9 @@ Display Non 0 Clipped Non Faceme Transluecent Polys
 	Display Solid Screen Polys
 ===================================================================*/
 
+#ifdef FX_OPENXR
+	if( !TitleVREyePass )
+#endif
 	if( !DisplaySolidScrPolys( &RenderBufs[ 3 ] ) )
 		return false;
 
@@ -5027,6 +5039,11 @@ bool DisplayTitle(void)
 				SelectConnectionToJoin( NULL );
 			break;
 
+		case QUICKSTART_SinglePlayer:
+			InitStartMenu( NULL );
+			StartASinglePlayerGame( NULL );
+			break;
+
 		case QUICKSTART_Notify:
 			InitStartMenu( NULL );
 			CameraStatus = CAMERA_AtLeftVDU;
@@ -5086,6 +5103,25 @@ bool DisplayTitle(void)
 									   RENDERVAL(2 * CurrentCamera.Viewport.dvScaleY));
 */
 
+#ifdef FX_OPENXR
+	if( fx_vr_stereo_ready() )
+	{
+		// title room in 3D around the player; menu text and screen polys on the panel in front
+		bool ok;
+		TitleVREyePass = true;
+		ok = RenderCurrentCameraInVR( RenderCurrentMenu, 1.0F, NULL );
+		TitleVREyePass = false;
+		if( !ok )
+			return false;
+		set_alpha_states();
+		if( !DisplayNonSolidScrPolys( &RenderBufs[ 3 ] ) )
+			return false;
+		set_normal_states();
+		if( !DisplaySolidScrPolys( &RenderBufs[ 3 ] ) )
+			return false;
+	}
+	else
+#endif
 	if( render_info.stereo_enabled )
 	{
 		if(!RenderCurrentCameraInStereo(RenderCurrentMenu))

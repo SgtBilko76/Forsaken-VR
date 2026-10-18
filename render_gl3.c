@@ -1,6 +1,17 @@
 #if GL == 3
 #include "render_gl_shared.h"
 
+#ifdef GLES
+// GLES has no glMapBuffer(target, access): map the whole buffer for writing, keeping its contents.
+static void * map_whole_buffer( GLenum target )
+{
+	GLint size = 0;
+	glGetBufferParameteriv( target, GL_BUFFER_SIZE, &size );
+	return glMapBufferRange( target, 0, size, GL_MAP_WRITE_BIT );
+}
+#define glMapBuffer( target, access ) map_whole_buffer( target )
+#endif
+
 bool FSCreateVertexBuffer(RENDEROBJECT *renderObject, int numVertices)
 {
 	renderObject->lpVertexBuffer = create_buffer( numVertices * sizeof(LVERTEX), GL_ARRAY_BUFFER, GL_STATIC_DRAW );

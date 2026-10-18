@@ -1115,6 +1115,9 @@ void FindVisible( CAMERA *cam, MLOADHEADER *Mloadheader )
 		g->projection._32 = -2.0F * ( ( v->viewport->Y + v->viewport->Height * 0.5F )
 									- ( vp->Y + vp->Height * 0.5F ) )
 							/ vp->Height;
+		// keep an off-centre base projection (VR eyes have asymmetric frusta), scaled to the sub-viewport
+		g->projection._31 += cam->Proj._31 * v->viewport->Width / vp->Width;
+		g->projection._32 += cam->Proj._32 * v->viewport->Height / vp->Height;
 	}
 
 	// sort visible groups in depth order

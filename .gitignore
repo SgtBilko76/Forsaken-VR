@@ -11,3 +11,14 @@ pilots
 savegame
 *.dll
 gmon.out
+# Quest build
+build-gradle/
+build-android-deps/
+quest/.gradle/
+quest/app/build/
+quest/.cxx/
+quest/local.properties
+!tools/quest/*.sh
+!quest/defaults/configs/
+!quest/defaults/pilots/
+!quest/thirdparty/**/unix*

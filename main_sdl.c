@@ -2,7 +2,9 @@
 #include "util.h"
 #include "version.h"
 #include "main_sdl.h"
-#ifdef GL
+#ifdef GLES
+#include "fx_quest.h"
+#elif defined(GL)
 #include "SDL_opengl.h"
 #endif
 
@@ -138,7 +140,12 @@ static void set_opengl_settings( void )
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,	  1);
 
 #if SDL_VERSION_ATLEAST(2,0,0)
-#if GL == 3
+#if defined(GLES)
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+#elif GL == 3
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
 	// TODO - this isn't only mac osx specific is it ?
@@ -225,7 +232,11 @@ static u_int32_t create_renderer_flags( void )
 }
 static u_int32_t create_window_flags( void )
 {
+#ifdef __ANDROID__
+	u_int32_t window_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN;
+#else
 	u_int32_t window_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE; // TODO - we really want resizable ?
+#endif
 
 	if(render_info.fullscreen)
 		window_flags |= SDL_WINDOW_FULLSCREEN;
@@ -239,6 +250,8 @@ static u_int32_t create_window_flags( void )
 #endif
 
 
+
+static void set_aspect_ratio( void );
 
 static bool create_video_surface( u_int32_t window_flags, u_int32_t renderer_flags )
 {
@@ -257,6 +270,23 @@ static bool create_video_surface( u_int32_t window_flags, u_int32_t renderer_fla
 		Msg("main_sdl: failed to create window: %s\n",SDL_GetError());
 		return false;
 	}
+#ifdef GLES
+	// Quest: one GL ES context for the app's lifetime; the game draws into an offscreen
+	// framebuffer that the OpenXR host shows in the headset (fx_openxr.cpp).
+	if( ! SDL_GL_CreateContext( render_info.window ) )
+	{
+		Msg("main_sdl: failed to create GL ES context: %s\n",SDL_GetError());
+		return false;
+	}
+	if( ! fx_vr_init( &render_info.ThisMode.w, &render_info.ThisMode.h ) )
+	{
+		Msg("main_sdl: OpenXR initialisation failed\n");
+		return false;
+	}
+	render_info.window_size.cx = render_info.WindowsDisplay.w = render_info.ThisMode.w;
+	render_info.window_size.cy = render_info.WindowsDisplay.h = render_info.ThisMode.h;
+	set_aspect_ratio();
+#else
 	render_info.renderer = SDL_CreateRenderer(
 		render_info.window,
 		-1,
@@ -267,6 +297,7 @@ static bool create_video_surface( u_int32_t window_flags, u_int32_t renderer_fla
 		Msg("main_sdl: failed to create renderer: %s\n",SDL_GetError());
 		return false;
 	}
+#endif
 
   #else
 	render_info.screen = SDL_SetVideoMode(
@@ -348,7 +379,9 @@ bool sdl_init_video( void )
 
 void sdl_render_present( render_info_t * info )
 {
-#if SDL_VERSION_ATLEAST(2,0,0)
+#if defined(GLES)
+	fx_vr_present();
+#elif SDL_VERSION_ATLEAST(2,0,0)
 	SDL_RenderPresent(info->renderer);
 #else
 	SDL_GL_SwapBuffers();

@@ -4,6 +4,17 @@
 #include "render.h"
 #include <SDL.h>
 
+// SDL2: SDL_JoystickName() takes a handle, the by-index variant was renamed
+#if SDL_VERSION_ATLEAST(2,0,0)
+static const char * joystick_name( int i )
+{
+	const char * name = SDL_JoystickNameForIndex(i);
+	return name ? name : "Unknown Joystick";
+}
+#else
+#define joystick_name(i) SDL_JoystickName(i)
+#endif
+
 JOYSTICKINFO JoystickInfo[MAX_JOYSTICKS];
 
 extern bool RenderModeReset( void );
@@ -247,11 +258,16 @@ void app_keyboard( SDL_KeyboardEvent * key )
 	}
 	if( key->type == SDL_KEYDOWN )
 	{
+#if SDL_VERSION_ATLEAST(2,0,0)
+		// SDL2 dropped keysym.unicode; SDL2 keycodes match ASCII for printable keys
+		input_buffer_send( key->keysym.sym );
+#else
 		input_buffer_send(
 			key->keysym.unicode ? 
 				key->keysym.unicode :
 				key->keysym.sym
 		);
+#endif
 	}
 }
 
@@ -513,6 +529,19 @@ void app_joy_hat( SDL_JoyHatEvent * hat )
 	}
 }
 
+#if SDL_VERSION_ATLEAST(2,0,0) && !defined(DINPUTJOY)
+// SDL2 joystick instance id -> index into JoystickInfo (-1 = not one of ours)
+static int joystick_index( SDL_JoystickID id )
+{
+	int i;
+	for( i = 0; i < Num_Joysticks && i < MAX_JOYSTICKS; i++ )
+		if( JoystickInfo[i].connected && JoystickInfo[i].sdl_joy &&
+			SDL_JoystickInstanceID( JoystickInfo[i].sdl_joy ) == id )
+			return i;
+	return -1;
+}
+#endif
+
 #ifndef DINPUTJOY
 bool joysticks_init(void)
 {
@@ -539,7 +568,7 @@ bool joysticks_init(void)
 		{
 			DebugPrintf(
 				"joysticks_init: joystick (%d), '%s' failed to open\n",
-				i, SDL_JoystickName(i)
+				i, joystick_name(i)
 			);
 			continue;
 		}
@@ -555,7 +584,7 @@ bool joysticks_init(void)
 		// TODO
 		// JoystickInfo[i].NumBalls = SDL_JoystickNumBalls(joy);
 
-		JoystickInfo[i].Name = strdup( SDL_JoystickName(i) );
+		JoystickInfo[i].Name = strdup( joystick_name(i) );
 
 		DebugPrintf( 
 			"joysticks_init: joystick (%d), name='%s', axises=%d, buttons=%d, hats=%d\n", 
@@ -784,8 +813,11 @@ bool handle_events( void )
 			app_mouse_motion( &_event );
 			break;
 
+		// SDL2 events carry the joystick's instance id, the game's tables are indexed by
+		// the index it was opened with (they only match when no device was ever removed).
 		case SDL_JOYAXISMOTION:
-			app_joy_axis( &_event );
+			if( (_event.jaxis.which = joystick_index( _event.jaxis.which )) >= 0 )
+				app_joy_axis( &_event );
 			break;
 
 		case SDL_JOYBALLMOTION:
@@ -794,11 +826,13 @@ bool handle_events( void )
 
 		case SDL_JOYBUTTONDOWN:
 		case SDL_JOYBUTTONUP:
-			app_joy_button( &_event );
+			if( (_event.jbutton.which = joystick_index( _event.jbutton.which )) >= 0 )
+				app_joy_button( &_event );
 			break;
 
 		case SDL_JOYHATMOTION:
-			app_joy_hat( &_event );
+			if( (_event.jhat.which = joystick_index( _event.jhat.which )) >= 0 )
+				app_joy_hat( &_event );
 			break;
 
 #else

@@ -13,14 +13,35 @@
 #include "file.h"
 #include <stdio.h>
 #include "main_sdl.h"
+// declare GL 2.0+ entry points (glCreateShader, glGetStringi, ...); without this
+// they are implicitly declared as returning int and pointers get truncated on 64-bit
+#define GL_GLEXT_PROTOTYPES 1
+#ifdef GLES
+// OpenGL ES 3.2 (Meta Quest): the GL3 renderer with a few desktop-only calls mapped.
+#include <GLES3/gl32.h>
+#include <GLES2/gl2ext.h>
+#define glClearDepth(d)        glClearDepthf(d)
+#define glDepthRange(n,f)      glDepthRangef(n,f)
+#define glPolygonMode(face,m)  ((void)0)   // wireframe/points debug modes only
+#ifndef GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT
+#define GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT 0x84FF
+#endif
+#ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
+#define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
+#endif
+#else
 #include "SDL_opengl.h"
+#ifndef MACOSX
+#include <GL/glu.h>
+#endif
+#endif
 
 extern render_info_t render_info;
 
 extern GLenum render_last_gl_error;
 
 // TODO invalid pointer
-#if defined(MACOSX) && SDL_VERSION_ATLEAST(2,0,0)
+#if (defined(MACOSX) && SDL_VERSION_ATLEAST(2,0,0)) || defined(GLES)
 #define gluErrorString(e)\
 	(e == 0x0500 ? "invalid enumerant" : \
 	(e == 0x0501 ? "invalid value" : \

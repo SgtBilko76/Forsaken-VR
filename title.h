@@ -9,6 +9,7 @@
 #define QUICKSTART_None		0
 #define QUICKSTART_Start	1
 #define QUICKSTART_Join		2
+#define QUICKSTART_SinglePlayer	3
 #define QUICKSTART_Notify	5
 
 #define ALLOWED_BIKETYPES	MAXBIKETYPES

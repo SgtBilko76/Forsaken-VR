@@ -1197,6 +1197,42 @@ int AddButton( int joystick, int button, USERKEY *k )
 }
 
 
+#ifdef FX_OPENXR
+#include "fx_quest.h"
+// Default flight layout for the Quest Touch controllers; changeable in the game's joystick options.
+//   axes:    0 left stick X (slide)  1 left stick Y (forward/back)  2 right stick X (turn)  3 right stick Y (pitch)
+//   buttons: see FX_TOUCH_BUTTON_* in fx_quest.h
+static void ConfigureQuestTouch( int j, USERCONFIG *u )
+{
+	int k;
+	for ( k = AXIS_Start; k <= AXIS_End; k++ )
+	{
+		JoystickInfo[ j ].Axis[ k ].action = SHIPACTION_Nothing;
+		JoystickInfo[ j ].Axis[ k ].sensitivity = 0.01F;  // full stick = full keyboard speed
+		JoystickInfo[ j ].Axis[ k ].deadzone = 15;
+		JoystickInfo[ j ].Axis[ k ].inverted = false;
+		JoystickInfo[ j ].Axis[ k ].fine = true;
+	}
+	JoystickInfo[ j ].Axis[ AXIS_XAxis ].action = SHIPACTION_SlideLeft;    // + = slide right
+	JoystickInfo[ j ].Axis[ AXIS_YAxis ].action = SHIPACTION_MoveForward;  // + = backwards
+	JoystickInfo[ j ].Axis[ AXIS_ZAxis ].action = SHIPACTION_RotateLeft;   // + = turn right
+	JoystickInfo[ j ].Axis[ AXIS_RxAxis ].action = SHIPACTION_RotateUp;    // + = nose up
+	AddButton( j, FX_TOUCH_BUTTON_RIGHT_TRIGGER, &u->fire_primary );
+	AddButton( j, FX_TOUCH_BUTTON_LEFT_TRIGGER,  &u->fire_secondary );
+	AddButton( j, FX_TOUCH_BUTTON_RIGHT_GRIP,    &u->roll_right );
+	AddButton( j, FX_TOUCH_BUTTON_LEFT_GRIP,     &u->roll_left );
+	AddButton( j, FX_TOUCH_BUTTON_A,             &u->select_next_primary );
+	AddButton( j, FX_TOUCH_BUTTON_B,             &u->select_next_secondary );
+	AddButton( j, FX_TOUCH_BUTTON_X,             &u->move_down );
+	AddButton( j, FX_TOUCH_BUTTON_Y,             &u->move_up );
+	AddButton( j, FX_TOUCH_BUTTON_LEFT_STICK,    &u->fire_mine );
+	AddButton( j, FX_TOUCH_BUTTON_RIGHT_STICK,   &u->turbo );
+	JoystickInfo[ j ].assigned = true;
+	SetUpJoystickAxis( j );
+	DebugPrintf( "DefaultJoystickSettings: joystick #%d configured for Quest Touch\n", j );
+}
+#endif
+
 void DefaultJoystickSettings( USERCONFIG *u )
 {
 	int j, k;
@@ -1212,6 +1248,14 @@ void DefaultJoystickSettings( USERCONFIG *u )
 			JoystickInfo[ j ].assigned );
 		if ( JoystickInfo[ j ].connected && !JoystickInfo[ j ].assigned )
 		{
+#ifdef FX_OPENXR
+			// Meta Quest Touch controllers (virtual joystick from quest/src/fx_openxr.cpp)
+			if ( !strcasecmp( JoystickInfo[ j ].Name, FX_TOUCH_JOYSTICK_NAME ) )
+			{
+				ConfigureQuestTouch( j, u );
+				continue;
+			}
+#endif
 			// if spaceorb...
 			if ( !strcasecmp( JoystickInfo[ j ].Name, "Spacetec SpaceOrb 360" ) )
 			{
