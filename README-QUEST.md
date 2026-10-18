@@ -11,7 +11,7 @@ A native Meta Quest port of [Forsaken](https://github.com/ForsakenX/forsaken), t
 
 ## Install
 
-Easiest: the **full APK** has the game data built in.
+The APK has the game data built in.
 
 1. Download `Forsaken-VR-v0.1.1-beta-full.apk` from the
    [releases page](https://github.com/SgtBilko76/Forsaken-VR/releases).
@@ -20,12 +20,7 @@ Easiest: the **full APK** has the game data built in.
    The first start unpacks the game data to `/sdcard/Forsaken` (about 185 MB, takes about a
    minute with a black screen), then the title appears.
 
-Small APK (`Forsaken-VR-v0.1.1-beta.apk`, 3 MB) without the game data: install it the same
-way, then download [forsaken-data (zip)](https://github.com/ForsakenX/forsaken-data/archive/refs/heads/master.zip)
-from ForsakenX, unzip it and copy the CONTENTS of `forsaken-data-master` to `/sdcard/Forsaken/data`
-(e.g. `adb push forsaken-data-master/. /sdcard/Forsaken/data`).
-
-Scripts and default settings come with both APKs. Your pilots, settings and save games in
+Scripts and default settings come with the APK. Your pilots, settings and save games in
 `/sdcard/Forsaken` stay across updates.
 
 ## Controls
@@ -52,7 +47,7 @@ Needs the Android SDK, NDK 27.2 and CMake 3.22 (see `quest/app/build.gradle`).
 
     git submodule update --init quest/external/SDL
     tools/quest/build_deps.sh          # OpenAL, libpng, zlib for arm64-android (vcpkg)
-    tools/quest/build_full_apk.sh      # dist/: small APK + full APK with the ForsakenX game data
+    tools/quest/build_full_apk.sh      # dist/: APK with the ForsakenX game data
 
 `tools/quest/stage_data.sh` copies a forsaken-data checkout to a USB-connected headset and
 `tools/quest/quest_run.sh` builds, installs, launches and takes a screenshot.

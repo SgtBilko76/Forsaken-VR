@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Builds both release APKs into dist/:
-#   Forsaken-VR-v<ver>.apk       game data copied to /sdcard/Forsaken/data by the player
-#   Forsaken-VR-v<ver>-full.apk  game data inside, unpacked to /sdcard/Forsaken on first start
+# Builds the release APK into dist/: Forsaken-VR-v<ver>-full.apk, game data inside,
+# unpacked to /sdcard/Forsaken on first start.
 # Usage: tools/quest/build_full_apk.sh [forsaken-data folder]
 #   default: ../forsaken-data, else the ForsakenX download is fetched into build-fulldata/.
 set -euo pipefail
@@ -20,11 +19,9 @@ fi
 DATA=$(realpath "$DATA")
 mkdir -p dist
 cd quest
-./gradlew --offline -q assembleRelease
-cp app/build/outputs/apk/release/app-release.apk "../dist/Forsaken-VR-v$VER.apk"
 ./gradlew --offline -q assembleRelease -PgameData="$DATA"
 cp app/build/outputs/apk/release/app-release.apk "../dist/Forsaken-VR-v$VER-full.apk"
-# Leave the build tree in the small configuration.
+# Leave the build tree without the game data (debug builds stay small).
 ./gradlew --offline -q fxAssets
 cd ..
 FILES=$(find "$DATA" -path "$DATA/.git" -prune -o -type f ! -name README.md ! -name LICENSE -print | wc -l)
