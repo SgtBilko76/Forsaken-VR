@@ -4,8 +4,7 @@ plugins {
 
 // Native code (game, SDL2, Lua, ENet, OpenXR host) is built by quest/CMakeLists.txt.
 // Game data is NOT packed into the APK: it lives in /sdcard/Forsaken/data (copied by the player).
-// The game's scripts and the Quest default settings are packed as assets and installed to
-// /sdcard/Forsaken on first start (ForsakenActivity).
+// Small APK: the player copies it there. Full APK (-PgameData=...): unpacked there on first start.
 
 android {
     namespace 'com.bilko.forsakenvr'
@@ -16,8 +15,8 @@ android {
         applicationId 'com.bilko.forsakenvr'
         minSdk 29
         targetSdk 32
-        versionCode 1
-        versionName '0.1.0-beta'
+        versionCode 2
+        versionName '0.1.1-beta'
 
         ndk {
             abiFilters 'arm64-v8a'
@@ -42,6 +41,11 @@ android {
     buildFeatures {
         prefab true
         buildConfig true
+    }
+
+    androidResources {
+        // the default pattern silently drops files starting with '_' or '.'
+        ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
     }
 
     lint {
@@ -85,10 +89,29 @@ dependencies {
     implementation 'org.khronos.openxr:openxr_loader_for_android:1.1.62'
 }
 
-// scripts/ from the game sources, configs/ + pilots/ from quest/defaults -> APK assets.
+// Files installed to /sdcard/Forsaken on start (fx_android.c): scripts/ from the game sources,
+// configs/ + pilots/ from quest/defaults, and with -PgameData=<forsaken-data checkout> the game
+// data as data/ (full APK). fxfiles.idx lists every file as "<size>\t<path>" because native code
+// can't list asset subfolders.
+def fxAssetsDir = layout.buildDirectory.dir( 'generated/fxassets' )
 tasks.register( 'fxAssets', Sync ) {
-    into layout.buildDirectory.dir( 'generated/fxassets' )
-    from( '../../scripts' ) { into 'scripts' }
-    from( '../defaults' )
+    into fxAssetsDir
+    from( '../../scripts' ) { into 'fx/scripts' }
+    from( '../defaults' ) { into 'fx' }
+    if( project.hasProperty( 'gameData' ) )
+        from( project.property( 'gameData' ) ) {
+            into 'fx/data'
+            exclude '.git', '.git/**', 'README.md', 'LICENSE'
+        }
+    inputs.property( 'gameData', project.findProperty( 'gameData' ) ?: '' )
+    doLast {
+        def root = fxAssetsDir.get().dir( 'fx' ).asFile
+        def lines = []
+        root.eachFileRecurse( groovy.io.FileType.FILES ) { f ->
+            lines << "${f.length()}\t${root.toPath().relativize( f.toPath() ).toString().replace( '\\', '/' )}"
+        }
+        lines.sort()
+        fxAssetsDir.get().file( 'fxfiles.idx' ).asFile.text = lines.join( '\n' ) + '\n'
+    }
 }
 preBuild.dependsOn 'fxAssets'

@@ -22,3 +22,5 @@ quest/local.properties
 !quest/defaults/configs/
 !quest/defaults/pilots/
 !quest/thirdparty/**/unix*
+dist/
+build-fulldata/

@@ -1,10 +1,15 @@
 /*
  * fx_android.c - Android start-up for Forsaken on Meta Quest: logcat output, crash handler,
- * game folder.
+ * installing the files packed in the APK, game folder.
  */
 #include "fx_quest.h"
 
+#include <SDL.h>
+#include <android/asset_manager.h>
+#include <android/asset_manager_jni.h>
 #include <android/log.h>
+#include <errno.h>
+#include <jni.h>
 #include <dlfcn.h>
 #include <pthread.h>
 #include <signal.h>
@@ -120,12 +125,149 @@ static void install_crash_handler( void )
 		sigaction( sigs[ i ], &sa, NULL );
 }
 
+// --- files packed in the APK -> FX_DATA_DIR ---
+// assets/fxfiles.idx lists "<size>\t<path>" for every file below assets/fx/: scripts/, configs/,
+// pilots/ and, in the full APK, data/ (the game data). They are written to FX_DATA_DIR when the
+// index changes (new APK); configs/ and pilots/ only when missing, so the player's settings stay.
+
+static AAssetManager *get_asset_manager( void )
+{
+	JNIEnv *env = (JNIEnv *) SDL_AndroidGetJNIEnv();
+	jobject activity = (jobject) SDL_AndroidGetActivity();
+	if( ! env || ! activity )
+		return NULL;
+	jclass cls = (*env)->GetObjectClass( env, activity );
+	jmethodID get = (*env)->GetMethodID( env, cls, "getAssets", "()Landroid/content/res/AssetManager;" );
+	jobject assets = (*env)->CallObjectMethod( env, activity, get );
+	jobject global = (*env)->NewGlobalRef( env, assets );  // kept for the process lifetime
+	(*env)->DeleteLocalRef( env, assets );
+	(*env)->DeleteLocalRef( env, cls );
+	(*env)->DeleteLocalRef( env, activity );
+	return AAssetManager_fromJava( env, global );
+}
+
+static void make_dirs( char *path )  // creates every parent folder of path
+{
+	for( char *p = path + 1; *p; p ++ )
+		if( *p == '/' )
+		{
+			*p = 0;
+			mkdir( path, 0775 );
+			*p = '/';
+		}
+}
+
+static bool write_asset( AAssetManager *mgr, const char *name, const char *dest )
+{
+	static char buf[ 1 << 20 ];
+	char asset[ 1024 ], part[ 1100 ];
+	snprintf( asset, sizeof(asset), "fx/%s", name );
+	snprintf( part, sizeof(part), "%s.part", dest );
+	AAsset *a = AAssetManager_open( mgr, asset, AASSET_MODE_STREAMING );
+	if( ! a )
+		return false;
+	FILE *f = fopen( part, "wb" );
+	bool ok = f != NULL;
+	int n;
+	while( ok && (n = AAsset_read( a, buf, sizeof(buf) )) > 0 )
+		ok = fwrite( buf, 1, n, f ) == (size_t) n;
+	AAsset_close( a );
+	if( f && fclose( f ) != 0 )
+		ok = false;
+	ok = ok && rename( part, dest ) == 0;
+	if( ! ok )
+		unlink( part );
+	return ok;
+}
+
+static void install_packed_files( void )
+{
+	AAssetManager *mgr = get_asset_manager();
+	AAsset *idx = mgr ? AAssetManager_open( mgr, "fxfiles.idx", AASSET_MODE_BUFFER ) : NULL;
+	if( ! idx )
+		return;
+	size_t len = AAsset_getLength( idx );
+	char *list = malloc( len + 1 );
+	memcpy( list, AAsset_getBuffer( idx ), len );
+	list[ len ] = 0;
+	AAsset_close( idx );
+
+	// The settings screen for "All files access" opens on first start; wait until it is granted.
+	char probe[ 256 ], marker[ 256 ], hash[ 32 ], old[ 32 ] = "";
+	snprintf( probe, sizeof(probe), "%s/.write-test", FX_DATA_DIR );
+	mkdir( FX_DATA_DIR, 0775 );
+	for( int tries = 0; ; tries ++ )
+	{
+		FILE *f = fopen( probe, "w" );
+		if( f ) { fclose( f ); unlink( probe ); break; }
+		if( tries == 600 )
+		{
+			__android_log_print( ANDROID_LOG_ERROR, TAG, "no write access to %s (errno %d)", FX_DATA_DIR, errno );
+			free( list );
+			return;
+		}
+		mkdir( FX_DATA_DIR, 0775 );
+		usleep( 500 * 1000 );
+	}
+
+	unsigned h = 2166136261u;  // FNV-1a of the index: changes with every APK whose files change
+	for( size_t i = 0; i < len; i ++ )
+		h = (h ^ (unsigned char) list[ i ]) * 16777619u;
+	snprintf( hash, sizeof(hash), "%08x", h );
+	snprintf( marker, sizeof(marker), "%s/.apk-files", FX_DATA_DIR );
+	FILE *m = fopen( marker, "r" );
+	if( m ) { if( ! fgets( old, sizeof(old), m ) ) old[ 0 ] = 0; fclose( m ); }
+	if( ! strcmp( old, hash ) )
+	{
+		free( list );
+		return;
+	}
+
+	int files = 0, written = 0, failed = 0;
+	double mb = 0;
+	Uint32 start = SDL_GetTicks();
+	for( char *line = strtok( list, "\n" ); line; line = strtok( NULL, "\n" ) )
+	{
+		char *tab = strchr( line, '\t' );
+		if( ! tab )
+			continue;
+		const char *name = tab + 1;
+		char dest[ 1024 ];
+		struct stat st;
+		files ++;
+		snprintf( dest, sizeof(dest), "%s/%s", FX_DATA_DIR, name );
+		bool settings = ! strncmp( name, "configs/", 8 ) || ! strncmp( name, "pilots/", 7 );
+		if( settings && stat( dest, &st ) == 0 )
+			continue;
+		make_dirs( dest );
+		if( write_asset( mgr, name, dest ) )
+		{
+			written ++;
+			mb += atof( line ) / 1048576.0;
+		}
+		else
+		{
+			failed ++;
+			__android_log_print( ANDROID_LOG_ERROR, TAG, "installing %s failed (errno %d)", name, errno );
+		}
+	}
+	__android_log_print( ANDROID_LOG_INFO, TAG, "packed files: %d listed, %d written (%.0f MB), %d failed, %.1f s",
+		files, written, mb, failed, ( SDL_GetTicks() - start ) / 1000.0 );
+	if( ! failed && (m = fopen( marker, "w" )) )
+	{
+		fputs( hash, m );
+		fclose( m );
+	}
+	free( list );
+}
+
 bool fx_android_init( void )
 {
 	struct stat st;
 	redirect_output();
 	install_crash_handler();
 	setenv( "ALSOFT_LOGLEVEL", "2", 0 );  // OpenAL Soft warnings/errors -> stderr -> logcat
+	install_packed_files();
 
 	if( stat( FX_DATA_DIR, &st ) != 0 || ! S_ISDIR( st.st_mode ) || chdir( FX_DATA_DIR ) != 0 )
 	{
