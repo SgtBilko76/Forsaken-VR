@@ -25,6 +25,8 @@ Scripts and default settings come with the APK. Your pilots, settings and save g
 
 ## Controls
 
+![Forsaken VR controller mapping](docs/controls.webp)
+
 | Control | Menus | Flying |
 |---|---|---|
 | Left stick | Move selection | Forward/back, slide left/right |
