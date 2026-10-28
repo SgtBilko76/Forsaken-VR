@@ -1,5 +1,7 @@
 # Forsaken VR for Meta Quest 3
 
+**Download, install guide, controls and pictures: [portroyale.online/forsaken.html](https://portroyale.online/forsaken.html)**
+
 A native Meta Quest port of [Forsaken](https://github.com/ForsakenX/forsaken), the 1998
 6-degrees-of-freedom shooter, built on the ForsakenX community source port.
 
