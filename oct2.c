@@ -26,6 +26,7 @@
 #include "visi.h"
 #include "tload.h"
 #include "sfx.h"
+#include "music.h"
 #include "transexe.h"
 #include "text.h"
 #include "mxaload.h"
@@ -2330,6 +2331,9 @@ bool RenderScene( void )
   {
     CheckSBufferList();
   }
+
+  // keep the looping music track in sync with the current game status
+  Music_Update();
 
   switch( MyGameStatus )
   {

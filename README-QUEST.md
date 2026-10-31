@@ -15,9 +15,9 @@ A native Meta Quest port of [Forsaken](https://github.com/ForsakenX/forsaken), t
 
 The APK has the game data built in.
 
-1. Download `Forsaken-VR-v0.1.1-beta-full.apk` from the
+1. Download `Forsaken-VR-v0.1.2-full.apk` from the
    [releases page](https://github.com/SgtBilko76/Forsaken-VR/releases).
-2. Install it with SideQuest or `adb install -r Forsaken-VR-v0.1.1-beta-full.apk`.
+2. Install it with SideQuest or `adb install -r Forsaken-VR-v0.1.2-full.apk`.
 3. Start **Forsaken VR** from the app library (Unknown Sources) and allow "All files access".
    The first start unpacks the game data to `/sdcard/Forsaken` (about 185 MB, takes about a
    minute with a black screen), then the title appears.
@@ -60,3 +60,6 @@ Needs the Android SDK, NDK 27.2 and CMake 3.22 (see `quest/app/build.gradle`).
 
 Forsaken (c) 1998 Probe Entertainment / Acclaim. Source port and game data distribution by the
 [ForsakenX](https://github.com/ForsakenX) community. Quest VR port by SgtBilko76.
+
+Main menu music: "FORSAKEN Menu Music Option 1" (Forsaken Original Game Soundtrack Vol. 1, 2025) —
+music by super_bral_mouse00.
