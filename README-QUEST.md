@@ -62,4 +62,4 @@ Forsaken (c) 1998 Probe Entertainment / Acclaim. Source port and game data distr
 [ForsakenX](https://github.com/ForsakenX) community. Quest VR port by SgtBilko76.
 
 Main menu music: "FORSAKEN Menu Music Option 1" (Forsaken Original Game Soundtrack Vol. 1, 2025) —
-music by super_bral_mouse00.
+music by Super Brutal FX.
